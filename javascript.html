@@ -1,0 +1,187 @@
+<script>
+    //商品を追加したい場合はこのdataに{id,name,money}を追加する
+    data = [
+        { id: "49755251", name: "カントリーマアム(1枚)", money: 20 },
+        { id: "49415780", name: "うまい棒コーンポタージュ味", money: 15 },
+        { id: "49598704", name: "ミニコーラ", money: 30 },
+        { id: "4901365150101", name: "64g クッピーラムネ", money: 20 }
+    ];
+
+    //--------------------------------------------
+
+    data.forEach(function (item) {//cntは全て0だからforEachでまとめて初期化する
+        item.cnt = 0;
+    });
+
+
+    function get_data(id) {//data内で欲しいidのオブジェクトを取得して返す
+        return data.find(item => item.id === id);
+    };
+
+    const print_money = document.getElementById("total_money");
+    function update_money() {//金額を更新する
+        let total_money = 0;
+        data.forEach(function (item) {//各商品を見る
+            total_money += item.cnt * item.money;
+        });
+        print_money.textContent = total_money;
+    };
+
+
+    const form = document.getElementById("id_form");
+    form.addEventListener("submit", function () {
+        event.preventDefault();//フォームを送った際のページの再読み込みを防ぐ
+
+        const id = document.getElementById("merchandise_id").value;
+
+        const item = get_data(id);
+        if (item) {//idに対応する商品がdataに存在するかを判定する
+            item.cnt++;
+            update_money();
+
+            const table = document.getElementById("buy_list_table").getElementsByTagName('tbody')[0];//idがbuy_list_tableであり、その中のタグがtbodyである要素で、0番目のtbodyを取得する
+            let rowUpdated = false;//テーブルにidに対応した内容を見つけてテーブルを更新したか？trueなら更新した
+
+            for (let i = 0; i < table.rows.length; i++) {// テーブル内のすべての行を取得
+                const row = table.rows[i];
+                const nameCell = row.cells[0];
+
+                if (nameCell.textContent == item.name) {//for文で見てるセルに書かれてる名前と、今回追加する商品のidと紐づけされてる商品名が一致してるかを判定する
+                    // 一致する行が見つかった場合、その行を更新
+                    const quantity = document.getElementById(id);
+                    quantity.textContent++;
+
+                    rowUpdated = true;
+                    break;
+                }
+            }
+
+
+            if (!rowUpdated) {//一致する行が見つからなかった場合、新しい行をtbodyに追加する
+                const newRow = table.insertRow();//テーブルに新しい行を作成
+
+                const nameCell = newRow.insertCell(0);
+                const moneyCell = newRow.insertCell(1);
+                const cntCell = newRow.insertCell(2);
+
+
+                //新しい行のデータを登録する
+                nameCell.textContent = item.name;
+                moneyCell.textContent = item.money;
+                cntCell.textContent = item.cnt;
+
+                //個数を変更するボタンを、個数を表示している数字の左右に配置する。商品のidをそのまま個数の数字のhtmlのidとしている
+                cntCell.innerHTML = `
+              <div class="quantity_container">
+                      <button onclick="decreaseQuantity('${id}')">-</button>
+                      <span id="${id}">1</span>
+                      <button onclick="increaseQuantity('${id}')">+</button>
+                  </div>
+              `;
+            }
+        }
+        else {
+            console.log("その商品はありません");
+        }
+
+        form.reset();//フォームの中身をなくす
+    });
+
+
+    function all_reset(payment_method) {//現在の情報をスプレッドシートに書き込み、登録した購入情報をリセットする。購入方法を引数として受け取る
+        event.preventDefault();
+
+        //支払確定ボタンは登録してる商品が何もなくても押せるので、もし何もない状態で押してるならこの関数をここで終わらせる
+        let no_have = true;
+        data.forEach(function (item) {
+            if (item.cnt != 0) no_have = false;
+        });
+        if (no_have) {
+            const table = document.getElementById("buy_list_table").getElementsByTagName('tbody')[0];
+            table.innerHTML = '';
+            return;
+        }
+
+
+        // 現在の日付や時間を取得する
+        const now = new Date();
+
+        const year = now.getFullYear();        // 年
+        const month = now.getMonth() + 1;      // 月（0が1月なので+1が必要）
+        const day = now.getDate();             // 日
+        const hours = now.getHours();          // 時
+        const minutes = now.getMinutes();      // 分
+        const seconds = now.getSeconds();      // 秒
+
+        const dayOfWeek = now.getDay();        // 曜日を取得（0が日曜日、6が土曜日）
+
+        // 日時をまとめる
+        const formattedDate = `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+
+
+        //スプレッドシートに購入記録を書き込む
+        let new_push_data = [//購入データ
+
+        ];
+
+        data.forEach(function (item) {
+            if (item.cnt != 0) {//0個なら追加しないようにする
+                new_push_data.push([formattedDate, item.name, payment_method, item.cnt]);//[時間,商品名,金額,個数]を追加
+            }
+        });
+        google.script.run.appendToSheet(new_push_data);//コード.gsのappendToSheet関数を呼び出す、new_push_dataを引数として渡す
+
+
+        data.forEach(function (item) {//個数を初期化する
+            item.cnt = 0;
+        });
+
+        //テーブルを初期化
+        const table = document.getElementById("buy_list_table").getElementsByTagName('tbody')[0];
+        table.innerHTML = '';
+
+        update_money();//合計金額の表示を0にしたいので関数を呼ぶ
+    };
+
+    //支払い方法ごとに3種類にわけている
+    const real_money = document.getElementById("real_money");
+    real_money.addEventListener('click', (event) => {//現金支払い
+        all_reset("現金支払い");
+    });
+
+    const money_ticket = document.getElementById("money_ticket");
+    money_ticket.addEventListener('click', (event) => {//現金支払い
+        all_reset("金券支払い");
+    });
+
+    const aupay = document.getElementById("aupay");
+    aupay.addEventListener('click', (event) => {//現金支払い
+        all_reset("aupay支払い");
+    });
+
+
+    function decreaseQuantity(id) {//個数を減らすボタン。ボタンを押したときに、テーブルで個数を表示している内容のidを渡しているのでそのidの内容を変更する
+        const target = document.getElementById(id);
+
+        target.classList.remove('initial_color');//初期化状態の色を設定してるならこれを消す
+        const item = get_data(id);
+        item.cnt--;//dataの個数を減らす
+        update_money();//合計金額を更新する
+        target.textContent--;//テーブルに表示している個数を変更する
+    }
+
+    function increaseQuantity(id) {//個数を増やすボタン。ボタンを押したときに、テーブルで個数を表示している内容のidを渡しているのでそのidの内容を変更する
+        const target = document.getElementById(id);
+
+        target.classList.remove('initial_color');//初期化状態の色を設定してるならこれを消す
+        const item = get_data(id);
+        item.cnt++;//dataの個数を増やす
+        update_money();//合計金額を更新する
+        target.textContent++;//テーブルに表示している個数を変更する
+    }
+
+
+    document.getElementById("totalling").addEventListener('click', (event) => {
+        google.script.run.GetSumCnt(data);
+    });
+</script>
